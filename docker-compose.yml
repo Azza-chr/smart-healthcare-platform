@@ -1,0 +1,38 @@
+# Smart Healthcare Platform - Étape 3 : base de données
+# Lancer : docker compose up -d      Arrêter : docker compose down
+# Reset complet (efface les données) : docker compose down -v
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Les scripts sont exécutés UNE SEULE FOIS, à la création du volume, par ordre alphabétique
+      - ./database/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Interface web pour consulter la base (outil de développement)
+  adminer:
+    image: adminer:4
+    container_name: shp-adminer
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8088}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

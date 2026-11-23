@@ -1,0 +1,88 @@
+type Query {
+    "One patient file. Returns null when the id is unknown."
+    patient(id: ID!): Patient
+    "Filtered patient list. All arguments are optional and combine with AND."
+    patients(service: String, pathologie: String, risque: NiveauRisque): [Patient!]!
+    "Care history of the last N days, with an aggregate by type of care."
+    historiqueSoins(patientId: ID!, jours: Int = 30): HistoriqueSoins!
+}
+
+type Mutation {
+    "Creates an intervention sheet (called by the orchestrator)."
+    creerFicheIntervention(input: FicheInterventionInput!): FicheIntervention!
+}
+
+enum NiveauRisque { FAIBLE MOYEN ELEVE }
+
+type Patient {
+    id: ID!
+    nom: String!
+    prenom: String!
+    dateNaissance: String!
+    service: String!
+    pathologie: String!
+    niveauRisque: NiveauRisque!
+    medecinReferent: String!
+    derniereConstantes(limit: Int = 3): [Constante!]!
+    alertesRecentes(limit: Int = 5): [Alerte!]!
+    traitementsEnCours: [Traitement!]!
+}
+
+type Constante {
+    mesureLe: String!
+    frequenceCardiaque: Int
+    spo2: Int
+    temperature: Float
+    tensionSys: Int
+    tensionDia: Int
+}
+
+type Alerte {
+    id: ID!
+    type: String!
+    niveau: String!
+    message: String!
+    creeLe: String!
+}
+
+type Traitement {
+    medicament: String!
+    posologie: String!
+    debut: String!
+    fin: String
+}
+
+type Soin {
+    date: String!
+    type: String!
+    description: String!
+    praticien: String!
+}
+
+type CompteParType {
+    type: String!
+    nombre: Int!
+}
+
+type HistoriqueSoins {
+    patientId: ID!
+    jours: Int!
+    total: Int!
+    parType: [CompteParType!]!
+    soins: [Soin!]!
+}
+
+input FicheInterventionInput {
+    patientId: ID!
+    alerteRef: String
+    resume: String!
+}
+
+type FicheIntervention {
+    id: ID!
+    alerteRef: String
+    resume: String!
+    statut: String!
+    creeLe: String!
+    patient: Patient!
+}

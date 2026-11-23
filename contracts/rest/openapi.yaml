@@ -1,0 +1,267 @@
+openapi: 3.0.3
+info:
+  title: Appointments API (REST)
+  description: Patient portal and appointment booking for the Smart Healthcare Platform.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8081
+    description: Direct access (development)
+tags:
+  - name: Slots
+  - name: Appointments
+  - name: Patients
+paths:
+  /creneaux:
+    get:
+      tags: [Slots]
+      summary: List free slots
+      description: Free, non-emergency, future slots. Defaults to the next 30 days.
+      parameters:
+        - name: specialite
+          in: query
+          required: false
+          schema: { type: string }
+          example: Pneumologie
+        - name: date
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          example: "2026-11-24"
+      responses:
+        "200":
+          description: Free slots, sorted by start time
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Creneau" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /rendez-vous:
+    post:
+      tags: [Appointments]
+      summary: Book a slot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RendezVousRequest" }
+      responses:
+        "201":
+          description: Appointment created
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RendezVous" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /rendez-vous/urgence:
+    post:
+      tags: [Appointments]
+      summary: Book an emergency slot
+      description: >
+        Takes the first free emergency slot of the specialty (default Cardiologie) and
+        sets its start time to now plus 10 minutes. Used by the orchestrator.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UrgenceRequest" }
+      responses:
+        "201":
+          description: Emergency appointment created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RendezVous" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /rendez-vous/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Appointments]
+      summary: Get an appointment
+      responses:
+        "200":
+          description: The appointment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RendezVous" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Appointments]
+      summary: Move an appointment to another slot
+      description: Frees the old slot and occupies the new one in one transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RendezVousUpdateRequest" }
+      responses:
+        "200":
+          description: Updated appointment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RendezVous" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [Appointments]
+      summary: Cancel an appointment
+      description: Marks it ANNULE and frees the slot.
+      responses:
+        "204": { description: Cancelled }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /patients/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+        example: P002
+    get:
+      tags: [Patients]
+      summary: Get a patient profile
+      responses:
+        "200":
+          description: The profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Patient" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Patients]
+      summary: Update contact details
+      description: Only the fields that are sent are changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PatientUpdateRequest" }
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Patient" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /patients/{id}/ordonnances:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+        example: P002
+    get:
+      tags: [Patients]
+      summary: Prescription history, newest first
+      responses:
+        "200":
+          description: Prescriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Ordonnance" }
+        "404": { $ref: "#/components/responses/NotFound" }
+components:
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiError" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiError" }
+    Conflict:
+      description: Conflict (slot already booked, appointment already cancelled...)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiError" }
+  schemas:
+    Creneau:
+      type: object
+      properties:
+        id: { type: integer, example: 44 }
+        medecinId: { type: integer, example: 2 }
+        medecinNom: { type: string, example: Dr Hichem Chaabane }
+        specialite: { type: string, example: Pneumologie }
+        debut: { type: string, format: date-time }
+        fin: { type: string, format: date-time }
+        urgence: { type: boolean }
+        statut: { type: string, enum: [LIBRE, OCCUPE] }
+    RendezVous:
+      type: object
+      properties:
+        id: { type: integer, example: 2 }
+        patientId: { type: string, example: P002 }
+        patientNom: { type: string, example: Sarra Trabelsi }
+        creneau: { $ref: "#/components/schemas/Creneau" }
+        motif: { type: string }
+        type: { type: string, enum: [NORMAL, URGENCE] }
+        statut: { type: string, enum: [CONFIRME, ANNULE] }
+        creeLe: { type: string, format: date-time }
+    RendezVousRequest:
+      type: object
+      required: [patientId, creneauId, motif]
+      properties:
+        patientId: { type: string, example: P002 }
+        creneauId: { type: integer, example: 44 }
+        motif: { type: string, maxLength: 200, example: Asthma check-up }
+    RendezVousUpdateRequest:
+      type: object
+      required: [creneauId]
+      properties:
+        creneauId: { type: integer, example: 45 }
+        motif: { type: string, maxLength: 200 }
+    UrgenceRequest:
+      type: object
+      required: [patientId, motif]
+      properties:
+        patientId: { type: string, example: P001 }
+        specialite: { type: string, example: Cardiologie }
+        motif: { type: string, maxLength: 200, example: Tachycardia alert }
+    Patient:
+      type: object
+      properties:
+        id: { type: string, example: P002 }
+        nom: { type: string }
+        prenom: { type: string }
+        dateNaissance: { type: string, format: date }
+        email: { type: string }
+        telephone: { type: string }
+        adresse: { type: string }
+    PatientUpdateRequest:
+      type: object
+      properties:
+        email: { type: string, format: email, maxLength: 120 }
+        telephone: { type: string, example: "+216 20 999 002" }
+        adresse: { type: string, minLength: 5, maxLength: 200 }
+    Ordonnance:
+      type: object
+      properties:
+        id: { type: integer }
+        medecinNom: { type: string }
+        dateOrdonnance: { type: string, format: date }
+        medicament: { type: string, example: Salbutamol spray }
+        posologie: { type: string }
+        dureeJours: { type: integer, example: 60 }
+    ApiError:
+      type: object
+      properties:
+        timestamp: { type: string, format: date-time }
+        status: { type: integer, example: 409 }
+        error: { type: string, example: Conflict }
+        message: { type: string, example: Slot 44 is already booked }
